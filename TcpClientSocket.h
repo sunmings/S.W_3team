@@ -3,13 +3,14 @@
 #include <sys/types.h>
 #include <winsock2.h>
 #include <fstream>
+#include <windows.h>
 #pragma comment(lib, "ws2_32.lib")
 
-#define BUFSIZE 1024*24
+#define BUFSIZE 1024
 
 using namespace std;
 
-class UdpClientSocket
+class TcpClientSocket
 {
 private :
 	char servIp[50];
@@ -27,21 +28,22 @@ private :
 	SOCKET sock;
 
 public :
-	UdpClientSocket(int port, char* ip, int serv_port);
+	TcpClientSocket(int port, char* ip, int serv_port);
 	void createSocket();
+	void connectSocket();
 	void sendMessage(char* message);
-	void receiveFile(char* file_name);
 	char* receiveMessage();
+	void receiveFile(char* file_name);
 };
 
-UdpClientSocket::UdpClientSocket(int port, char* ip, int servPort)
+TcpClientSocket::TcpClientSocket(int port, char* ip, int serv_port)
 {
 	this->port = port;
-	this->servPort = servPort;
 	strcpy(servIp, ip);
+	servPort = serv_port;
 }
 
-void UdpClientSocket::createSocket()
+void TcpClientSocket::createSocket()
 {
 	if ((WSAStartup(MAKEWORD(2, 2), &wsaData)) != 0)
 	{
@@ -49,7 +51,7 @@ void UdpClientSocket::createSocket()
 		exit(1);
 	}
 
-	if ((sock = socket(PF_INET, SOCK_DGRAM, 0)) == INVALID_SOCKET)
+	if ((sock = socket(PF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET)
 	{
 		perror("sock : ");
 		exit(1);
@@ -59,31 +61,33 @@ void UdpClientSocket::createSocket()
 	servAddr.sin_family = AF_INET;
 	servAddr.sin_addr.s_addr = inet_addr(servIp);
 	servAddr.sin_port = htons(servPort);
-
-	peerLen = sizeof(peerAddr);
 }
 
-void UdpClientSocket::sendMessage(char* message)
+void TcpClientSocket::connectSocket()
 {
-	int mLen = strlen(message);
-	strcpy(buf, message);
-	sendto(sock, buf, mLen, 0, (struct sockaddr *)&servAddr, sizeof(servAddr));
-}
-
-char* UdpClientSocket::receiveMessage()
-{
-	int mLen = recvfrom(sock, buf, BUFSIZE, 0, (SOCKADDR *)&peerAddr, &peerLen);
-
-	if(memcmp(&peerAddr, &servAddr, sizeof(peerAddr)))
+	if( (connect(sock, (struct sockaddr *)&servAddr, sizeof(servAddr))) == INVALID_SOCKET)
 	{
-		printf("서버로 부터 받은 데이터가 아닙니다.\n");
+		perror("connect : ");
 		exit(1);
 	}
+}
+
+char* TcpClientSocket::receiveMessage()
+{
+	int mLen = recv(sock, buf, BUFSIZE, 0);
+
 	buf[mLen] = 0;
 	return buf;
 }
 
-void UdpClientSocket::receiveFile(char* file_name)
+void TcpClientSocket::sendMessage(char* message)
+{
+	strcpy(buf, message);
+	send(sock, buf, strlen(buf), 0);
+	Sleep(100);
+}
+
+void TcpClientSocket::receiveFile(char* file_name)
 {
 	ofstream outFile(file_name);
 
@@ -92,6 +96,7 @@ void UdpClientSocket::receiveFile(char* file_name)
 	{
 		if(outFile.is_open())
 		{
+			printf("%s\n", buf);
 			outFile << buf;
 			strcpy(buf, receiveMessage());
 		}
